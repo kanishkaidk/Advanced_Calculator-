@@ -156,10 +156,10 @@
 <body>
   <main class="card">
     <h1>my calculator demo</h1>
-    <p>supports + - * / % ^, brackets, unary minus, reciprocal(x), and implicit multiplication.</p>
+    <p>supports + - * / % ^, roots, powers, logs, trig, reciprocal, and implicit multiplication.</p>
 
     <div class="row">
-      <input id="expr" type="text" placeholder="try: 2(3+4) + reciprocal(4)" />
+      <input id="expr" type="text" placeholder="try: sqrt(16)+pow(2,5)-sin(rad(30))" />
       <button id="go">calculate</button>
     </div>
 
@@ -174,15 +174,29 @@
   <script>
     const examples = [
       "2+3*4",
-      "reciprocal(4)+1",
-      "-(3+4)*2",
-      "2(3+4)",
-      "3^2+5%2"
+      "sqrt(16)+cbrt(27)",
+      "nrt(32,5)+pow(2,3)",
+      "e(1)+exp10(2)",
+      "ln(e)+log(100)+log2(8)+logb(8,2)",
+      "sin(rad(30))+cos(rad(60))+tan(rad(45))",
+      "csc(rad(30))+sec(rad(60))+cot(rad(45))",
+      "2pi+recip(4)"
     ];
 
     const exprEl = document.getElementById("expr");
     const resultEl = document.getElementById("result");
     const chipsEl = document.getElementById("chips");
+
+    const unaryFns = new Set([
+      "reciprocal", "sqrt", "cbrt", "e", "exp10",
+      "ln", "log", "log2", "sin", "cos", "tan",
+      "csc", "sec", "cot", "rad", "deg"
+    ]);
+    const binaryFns = new Set(["nrt", "pow", "logb"]);
+
+    function isFunctionToken(t) {
+      return unaryFns.has(t) || binaryFns.has(t);
+    }
 
     for (const ex of examples) {
       const b = document.createElement("button");
@@ -231,45 +245,60 @@
           continue;
         }
 
-        if (clean.slice(i, i + 11) === "reciprocal(") {
-          if (number) {
-            tokens.push(number);
-            number = "";
-          }
-          tokens.push("reciprocal", "(");
-          i += 11;
-          continue;
-        }
-
-        if (clean.slice(i, i + 6) === "recip(") {
-          if (number) {
-            tokens.push(number);
-            number = "";
-          }
-          tokens.push("reciprocal", "(");
-          i += 6;
-          continue;
-        }
-
         if (number) {
           tokens.push(number);
           number = "";
+        }
+
+        if ((ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z")) {
+          let name = "";
+          while (i < clean.length) {
+            const k = clean[i];
+            const isAlpha = (k >= "a" && k <= "z") || (k >= "A" && k <= "Z");
+            const isDigit = k >= "0" && k <= "9";
+            if (!isAlpha && !isDigit && k !== "_") break;
+            name += k;
+            i++;
+          }
+
+          const lower = name.toLowerCase();
+          const next = i < clean.length ? clean[i] : "";
+
+          if (lower === "pi") {
+            tokens.push(String(Math.PI));
+            continue;
+          }
+          if (lower === "tau") {
+            tokens.push(String(2 * Math.PI));
+            continue;
+          }
+          if (lower === "e" && next !== "(") {
+            tokens.push(String(Math.E));
+            continue;
+          }
+          if (lower === "recip" && next === "(") {
+            tokens.push("reciprocal");
+            continue;
+          }
+          if (isFunctionToken(lower) && next === "(") {
+            tokens.push(lower);
+            continue;
+          }
+
+          throw new Error("unknown name: " + name);
         }
 
         if (ch === "-") {
           let unary = i === 0;
           if (tokens.length > 0) {
             const last = tokens[tokens.length - 1];
-            if (["(", "+", "-", "*", "/", "%", "^", "~"].includes(last)) unary = true;
+            if (["(", ",", "+", "-", "*", "/", "%", "^", "~"].includes(last)) unary = true;
           }
 
           if (unary) {
             i++;
-            if (i < clean.length && clean[i] === "(") {
-              tokens.push("~");
-              continue;
-            }
-            if (clean.slice(i, i + 11) === "reciprocal(" || clean.slice(i, i + 6) === "recip(") {
+            const next = i < clean.length ? clean[i] : "";
+            if (next === "(" || ((next >= "a" && next <= "z") || (next >= "A" && next <= "Z"))) {
               tokens.push("~");
               continue;
             }
@@ -289,7 +318,7 @@
           continue;
         }
 
-        if (["+", "*", "/", "%", "^", "(", ")"].includes(ch)) {
+        if (["+", "*", "/", "%", "^", "(", ")", ","].includes(ch)) {
           tokens.push(ch);
           i++;
           continue;
@@ -311,7 +340,7 @@
         const a = tokens[i];
         const b = tokens[i + 1];
         const leftOk = isNumber(a) || a === ")";
-        const rightOk = isNumber(b) || b === "(" || b === "reciprocal";
+        const rightOk = isNumber(b) || b === "(" || isFunctionToken(b);
 
         if (leftOk && rightOk) out.push("*");
       }
@@ -321,13 +350,26 @@
     function toPostfix(tokens) {
       if (!tokens.length) throw new Error("no tokens to convert");
 
-      const p = { "+": 1, "-": 1, "*": 2, "/": 2, "%": 2, "^": 3, "~": 4, "reciprocal": 4 };
+      const p = { "+": 1, "-": 1, "*": 2, "/": 2, "%": 2, "^": 3, "~": 4 };
       const stack = [];
       const out = [];
 
       for (const t of tokens) {
         if (isNumber(t)) {
           out.push(t);
+          continue;
+        }
+
+        if (isFunctionToken(t)) {
+          stack.push(t);
+          continue;
+        }
+
+        if (t === ",") {
+          while (stack.length && stack[stack.length - 1] !== "(") {
+            out.push(stack.pop());
+          }
+          if (!stack.length) throw new Error("bad function args");
           continue;
         }
 
@@ -342,14 +384,14 @@
           }
           if (!stack.length) throw new Error("mismatched parentheses: extra )");
           stack.pop();
-          if (stack.length && ["~", "reciprocal"].includes(stack[stack.length - 1])) {
+          if (stack.length && isFunctionToken(stack[stack.length - 1])) {
             out.push(stack.pop());
           }
           continue;
         }
 
         if (Object.hasOwn(p, t)) {
-          const right = ["^", "~", "reciprocal"].includes(t);
+          const right = ["^", "~"].includes(t);
           while (stack.length && stack[stack.length - 1] !== "(" && Object.hasOwn(p, stack[stack.length - 1])) {
             const top = stack[stack.length - 1];
             const shouldPop = (!right && p[top] >= p[t]) || (right && p[top] > p[t]);
@@ -387,6 +429,68 @@
       throw new Error("unknown operator: " + op);
     }
 
+    function applyFunction(name, args) {
+      const x = args[0];
+      const y = args[1];
+
+      if (name === "reciprocal") {
+        if (x === 0) throw new Error("cannot take reciprocal of zero");
+        return 1 / x;
+      }
+      if (name === "sqrt") {
+        if (x < 0) throw new Error("sqrt domain error");
+        return Math.sqrt(x);
+      }
+      if (name === "cbrt") return Math.cbrt(x);
+      if (name === "nrt") {
+        if (y === 0) throw new Error("nrt with zero root");
+        if (x < 0 && Math.abs(y % 2) !== 1) throw new Error("nrt domain error");
+        if (x < 0) return -Math.pow(-x, 1 / y);
+        return Math.pow(x, 1 / y);
+      }
+      if (name === "pow") return Math.pow(x, y);
+      if (name === "e") return Math.exp(x);
+      if (name === "exp10") return Math.pow(10, x);
+      if (name === "ln") {
+        if (x <= 0) throw new Error("ln domain error");
+        return Math.log(x);
+      }
+      if (name === "log") {
+        if (x <= 0) throw new Error("log domain error");
+        return Math.log10(x);
+      }
+      if (name === "log2") {
+        if (x <= 0) throw new Error("log2 domain error");
+        return Math.log2(x);
+      }
+      if (name === "logb") {
+        if (x <= 0 || y <= 0 || y === 1) throw new Error("logb domain error");
+        return Math.log(x) / Math.log(y);
+      }
+      if (name === "sin") return Math.sin(x);
+      if (name === "cos") return Math.cos(x);
+      if (name === "tan") return Math.tan(x);
+      if (name === "csc") {
+        const v = Math.sin(x);
+        if (Math.abs(v) < 1e-12) throw new Error("csc domain error");
+        return 1 / v;
+      }
+      if (name === "sec") {
+        const v = Math.cos(x);
+        if (Math.abs(v) < 1e-12) throw new Error("sec domain error");
+        return 1 / v;
+      }
+      if (name === "cot") {
+        const v = Math.tan(x);
+        if (Math.abs(v) < 1e-12) throw new Error("cot domain error");
+        return 1 / v;
+      }
+      if (name === "rad") return x * Math.PI / 180;
+      if (name === "deg") return x * 180 / Math.PI;
+
+      throw new Error("unknown function: " + name);
+    }
+
     function evaluatePostfix(postfix) {
       if (!postfix.length) throw new Error("empty postfix expression");
       const stack = [];
@@ -401,13 +505,16 @@
           stack.push(-stack.pop());
           continue;
         }
-        if (t === "reciprocal") {
-          if (stack.length < 1) throw new Error("insufficient operands for reciprocal");
-          const x = stack.pop();
-          if (x === 0) throw new Error("cannot take reciprocal of zero");
-          stack.push(1 / x);
+
+        if (isFunctionToken(t)) {
+          const arity = binaryFns.has(t) ? 2 : 1;
+          if (stack.length < arity) throw new Error("insufficient operands for " + t);
+          const args = [];
+          for (let i = 0; i < arity; i++) args.unshift(stack.pop());
+          stack.push(applyFunction(t, args));
           continue;
         }
+
         if (["+", "-", "*", "/", "%", "^"].includes(t)) {
           if (stack.length < 2) throw new Error("insufficient operands");
           const b = stack.pop();
@@ -445,7 +552,7 @@
       if (e.key === "Enter") run();
     });
 
-    exprEl.value = "2+3*4";
+    exprEl.value = "sqrt(16)+pow(2,5)-sin(rad(30))";
     run();
   </script>
 </body>
