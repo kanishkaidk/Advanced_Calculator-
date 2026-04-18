@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>my calculator demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg1: #f8f2e8;
+      --bg2: #d7efe3;
+      --card: #fffaf2;
+      --ink: #222018;
+      --muted: #6b6657;
+      --accent: #0d8a6b;
+      --accent2: #f2b13f;
+      --danger: #b53c2c;
+      --ring: rgba(13, 138, 107, 0.2);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Space Grotesk", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 10%, #fff8ea 0%, transparent 35%),
+        radial-gradient(circle at 90% 80%, #d9f7ea 0%, transparent 35%),
+        linear-gradient(130deg, var(--bg1), var(--bg2));
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+
+    .card {
+      width: min(720px, 100%);
+      background: var(--card);
+      border: 2px solid #ece2ce;
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 16px 38px rgba(34, 32, 24, 0.12);
+      animation: floatIn 350ms ease-out;
+    }
+
+    @keyframes floatIn {
+      from { opacity: 0; transform: translateY(12px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(1.3rem, 2.2vw, 1.8rem);
+      text-transform: lowercase;
+    }
+
+    p {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 2px solid #e6dcc8;
+      border-radius: 12px;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 140ms ease, box-shadow 140ms ease;
+    }
+
+    input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--ring);
+    }
+
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 0 16px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 120ms ease, filter 120ms ease;
+    }
+
+    button:active { transform: translateY(1px); }
+
+    #go {
+      background: var(--accent);
+      color: white;
+      min-height: 44px;
+    }
+
+    #go:hover { filter: brightness(1.05); }
+
+    .chips {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      background: #f6edd9;
+      color: #5c4f2f;
+      border: 1px solid #e8d7ae;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 0.84rem;
+    }
+
+    .out {
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 12px;
+      background: #fff;
+      border: 2px dashed #e9dfcb;
+      min-height: 54px;
+      display: grid;
+      align-content: center;
+      gap: 4px;
+    }
+
+    .label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: lowercase;
+    }
+
+    #result {
+      font-size: 1.2rem;
+      font-weight: 700;
+      word-break: break-word;
+      text-transform: lowercase;
+    }
+
+    .err { color: var(--danger); }
+
+    @media (max-width: 640px) {
+      .row { grid-template-columns: 1fr; }
+      #go { min-height: 42px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>my calculator demo</h1>
+    <p>supports + - * / % ^, brackets, unary minus, reciprocal(x), and implicit multiplication.</p>
+
+    <div class="row">
+      <input id="expr" type="text" placeholder="try: 2(3+4) + reciprocal(4)" />
+      <button id="go">calculate</button>
+    </div>
+
+    <div class="chips" id="chips"></div>
+
+    <section class="out">
+      <div class="label">result</div>
+      <div id="result">-</div>
+    </section>
+  </main>
+
+  <script>
+    const examples = [
+      "2+3*4",
+      "reciprocal(4)+1",
+      "-(3+4)*2",
+      "2(3+4)",
+      "3^2+5%2"
+    ];
+
+    const exprEl = document.getElementById("expr");
+    const resultEl = document.getElementById("result");
+    const chipsEl = document.getElementById("chips");
+
+    for (const ex of examples) {
+      const b = document.createElement("button");
+      b.className = "chip";
+      b.textContent = ex;
+      b.addEventListener("click", () => {
+        exprEl.value = ex;
+        run();
+      });
+      chipsEl.appendChild(b);
+    }
+
+    function isNumber(s) {
+      if (!s || s.length === 0) return false;
+      let i = 0;
+      let dot = 0;
+      if (s[0] === "-") {
+        if (s.length === 1) return false;
+        i = 1;
+      }
+      for (; i < s.length; i++) {
+        if (s[i] === ".") {
+          dot++;
+          if (dot > 1) return false;
+        } else if (s[i] < "0" || s[i] > "9") {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function tokenize(query) {
+      if (!query || query.trim() === "") throw new Error("empty expression");
+
+      const clean = query.replace(/\s+/g, "");
+      const tokens = [];
+      let number = "";
+      let i = 0;
+
+      while (i < clean.length) {
+        const ch = clean[i];
+
+        if ((ch >= "0" && ch <= "9") || ch === ".") {
+          number += ch;
+          i++;
+          continue;
+        }
+
+        if (clean.slice(i, i + 11) === "reciprocal(") {
+          if (number) {
+            tokens.push(number);
+            number = "";
+          }
+          tokens.push("reciprocal", "(");
+          i += 11;
+          continue;
+        }
+
+        if (clean.slice(i, i + 6) === "recip(") {
+          if (number) {
+            tokens.push(number);
+            number = "";
+          }
+          tokens.push("reciprocal", "(");
+          i += 6;
+          continue;
+        }
+
+        if (number) {
+          tokens.push(number);
+          number = "";
+        }
+
+        if (ch === "-") {
+          let unary = i === 0;
+          if (tokens.length > 0) {
+            const last = tokens[tokens.length - 1];
+            if (["(", "+", "-", "*", "/", "%", "^", "~"].includes(last)) unary = true;
+          }
+
+          if (unary) {
+            i++;
+            if (i < clean.length && clean[i] === "(") {
+              tokens.push("~");
+              continue;
+            }
+            if (clean.slice(i, i + 11) === "reciprocal(" || clean.slice(i, i + 6) === "recip(") {
+              tokens.push("~");
+              continue;
+            }
+
+            let neg = "";
+            while (i < clean.length && ((clean[i] >= "0" && clean[i] <= "9") || clean[i] === ".")) {
+              neg += clean[i];
+              i++;
+            }
+            if (!neg) throw new Error("invalid expression");
+            tokens.push("-" + neg);
+            continue;
+          }
+
+          tokens.push("-");
+          i++;
+          continue;
+        }
+
+        if (["+", "*", "/", "%", "^", "(", ")"].includes(ch)) {
+          tokens.push(ch);
+          i++;
+          continue;
+        }
+
+        throw new Error("invalid character: " + ch);
+      }
+
+      if (number) tokens.push(number);
+      return tokens;
+    }
+
+    function addImplicitMultiplication(tokens) {
+      const out = [];
+      for (let i = 0; i < tokens.length; i++) {
+        out.push(tokens[i]);
+        if (i + 1 >= tokens.length) continue;
+
+        const a = tokens[i];
+        const b = tokens[i + 1];
+        const leftOk = isNumber(a) || a === ")";
+        const rightOk = isNumber(b) || b === "(" || b === "reciprocal";
+
+        if (leftOk && rightOk) out.push("*");
+      }
+      return out;
+    }
+
+    function toPostfix(tokens) {
+      if (!tokens.length) throw new Error("no tokens to convert");
+
+      const p = { "+": 1, "-": 1, "*": 2, "/": 2, "%": 2, "^": 3, "~": 4, "reciprocal": 4 };
+      const stack = [];
+      const out = [];
+
+      for (const t of tokens) {
+        if (isNumber(t)) {
+          out.push(t);
+          continue;
+        }
+
+        if (t === "(") {
+          stack.push(t);
+          continue;
+        }
+
+        if (t === ")") {
+          while (stack.length && stack[stack.length - 1] !== "(") {
+            out.push(stack.pop());
+          }
+          if (!stack.length) throw new Error("mismatched parentheses: extra )");
+          stack.pop();
+          if (stack.length && ["~", "reciprocal"].includes(stack[stack.length - 1])) {
+            out.push(stack.pop());
+          }
+          continue;
+        }
+
+        if (Object.hasOwn(p, t)) {
+          const right = ["^", "~", "reciprocal"].includes(t);
+          while (stack.length && stack[stack.length - 1] !== "(" && Object.hasOwn(p, stack[stack.length - 1])) {
+            const top = stack[stack.length - 1];
+            const shouldPop = (!right && p[top] >= p[t]) || (right && p[top] > p[t]);
+            if (!shouldPop) break;
+            out.push(stack.pop());
+          }
+          stack.push(t);
+          continue;
+        }
+
+        throw new Error("invalid token: " + t);
+      }
+
+      while (stack.length) {
+        if (stack[stack.length - 1] === "(") throw new Error("mismatched parentheses: extra (");
+        out.push(stack.pop());
+      }
+
+      return out;
+    }
+
+    function calc(a, b, op) {
+      if (op === "+") return a + b;
+      if (op === "-") return a - b;
+      if (op === "*") return a * b;
+      if (op === "/") {
+        if (b === 0) throw new Error("cannot divide by zero");
+        return a / b;
+      }
+      if (op === "%") {
+        if (b === 0) throw new Error("cannot modulo by zero");
+        return a % b;
+      }
+      if (op === "^") return a ** b;
+      throw new Error("unknown operator: " + op);
+    }
+
+    function evaluatePostfix(postfix) {
+      if (!postfix.length) throw new Error("empty postfix expression");
+      const stack = [];
+
+      for (const t of postfix) {
+        if (isNumber(t)) {
+          stack.push(Number(t));
+          continue;
+        }
+        if (t === "~") {
+          if (stack.length < 1) throw new Error("insufficient operands for unary minus");
+          stack.push(-stack.pop());
+          continue;
+        }
+        if (t === "reciprocal") {
+          if (stack.length < 1) throw new Error("insufficient operands for reciprocal");
+          const x = stack.pop();
+          if (x === 0) throw new Error("cannot take reciprocal of zero");
+          stack.push(1 / x);
+          continue;
+        }
+        if (["+", "-", "*", "/", "%", "^"].includes(t)) {
+          if (stack.length < 2) throw new Error("insufficient operands");
+          const b = stack.pop();
+          const a = stack.pop();
+          stack.push(calc(a, b, t));
+          continue;
+        }
+        throw new Error("invalid token in postfix: " + t);
+      }
+
+      if (stack.length !== 1) throw new Error("invalid expression");
+      return stack[0];
+    }
+
+    function evaluate(query) {
+      let tokens = tokenize(query);
+      tokens = addImplicitMultiplication(tokens);
+      const postfix = toPostfix(tokens);
+      return evaluatePostfix(postfix);
+    }
+
+    function run() {
+      resultEl.classList.remove("err");
+      try {
+        const ans = evaluate(exprEl.value);
+        resultEl.textContent = Number.isInteger(ans) ? String(ans) : String(Number(ans.toFixed(10)));
+      } catch (e) {
+        resultEl.classList.add("err");
+        resultEl.textContent = e.message;
+      }
+    }
+
+    document.getElementById("go").addEventListener("click", run);
+    exprEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") run();
+    });
+
+    exprEl.value = "2+3*4";
+    run();
+  </script>
+</body>
+</html>
